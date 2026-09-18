@@ -3,6 +3,7 @@ package io.temporal.opentelemetry.v2;
 import io.temporal.common.Experimental;
 import io.temporal.common.SimplePlugin;
 import io.temporal.opentelemetry.v2.internal.InterceptorTracer;
+import io.temporal.opentelemetry.v2.internal.OpenTelemetryContextPropagator;
 
 /**
  * OpenTelemetry v2 plugin for Temporal clients and workers.
@@ -24,7 +25,8 @@ public final class OpenTelemetryPlugin extends SimplePlugin {
             .addScheduleClientInterceptors(new OpenTelemetryScheduleClientInterceptor(tracer))
             .addActivityClientInterceptors(new OpenTelemetryActivityClientInterceptor(tracer))
             .addNexusClientInterceptors(new OpenTelemetryNexusClientInterceptor(tracer))
-            .addWorkerInterceptors(new OpenTelemetryWorkerInterceptor(tracer)));
+            .addWorkerInterceptors(new OpenTelemetryWorkerInterceptor(tracer))
+            .addContextPropagators(new OpenTelemetryContextPropagator()));
   }
 
   public static Builder newBuilder() {

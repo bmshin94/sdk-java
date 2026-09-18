@@ -2,6 +2,7 @@ package io.temporal.opentelemetry.v2.internal;
 
 import io.opentelemetry.api.common.Attributes;
 import io.temporal.client.schedules.ScheduleActionStartWorkflow;
+import io.temporal.client.schedules.ScheduleUpdate;
 import io.temporal.common.interceptors.ScheduleClientCallsInterceptor;
 import io.temporal.common.interceptors.ScheduleClientCallsInterceptorBase;
 
@@ -28,5 +29,27 @@ public class OpenTelemetryScheduleClientCallsInterceptor
         Attributes.empty(),
         ((ScheduleActionStartWorkflow) input.getSchedule().getAction()).getHeader(),
         () -> super.createSchedule(input));
+  }
+
+  @Override
+  public void updateSchedule(UpdateScheduleInput input) {
+    super.updateSchedule(
+        new UpdateScheduleInput(
+            input.getDescription(),
+            updateInput -> {
+              ScheduleUpdate update = input.getUpdater().apply(updateInput);
+              if (update == null
+                  || !(update.getSchedule().getAction() instanceof ScheduleActionStartWorkflow)) {
+                return update;
+              }
+
+              tracer.traceOutbound(
+                  "UpdateSchedule",
+                  input.getDescription().getId(),
+                  Attributes.empty(),
+                  ((ScheduleActionStartWorkflow) update.getSchedule().getAction()).getHeader(),
+                  () -> update);
+              return update;
+            }));
   }
 }

@@ -7,6 +7,8 @@ import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import io.temporal.client.WorkflowFailedException;
+import io.temporal.opentelemetry.v2.TestWorkflows.AsyncLambdaWorkflow;
+import io.temporal.opentelemetry.v2.TestWorkflows.AsyncLambdaWorkflowImpl;
 import io.temporal.opentelemetry.v2.TestWorkflows.BenignErrorWorkflow;
 import io.temporal.opentelemetry.v2.TestWorkflows.BenignErrorWorkflowImpl;
 import io.temporal.opentelemetry.v2.TestWorkflows.ErrorWorkflow;
@@ -27,7 +29,10 @@ public class InterceptorTest extends OtelTestBase {
   public SDKTestWorkflowRule testWorkflowRule =
       newRuleBuilder(true)
           .setWorkflowTypes(
-              SpanKindWorkflowImpl.class, BenignErrorWorkflowImpl.class, ErrorWorkflowImpl.class)
+              SpanKindWorkflowImpl.class,
+              BenignErrorWorkflowImpl.class,
+              ErrorWorkflowImpl.class,
+              AsyncLambdaWorkflowImpl.class)
           .setActivityImplementations(new TestActivitiesImpl())
           .build();
 
@@ -42,6 +47,21 @@ public class InterceptorTest extends OtelTestBase {
     assertEquals(SpanKind.SERVER, kinds.get("RunWorkflow:SpanKindWorkflow"));
     assertEquals(SpanKind.CLIENT, kinds.get("StartActivity:NopActivity"));
     assertEquals(SpanKind.SERVER, kinds.get("RunActivity:NopActivity"));
+  }
+
+  @Test
+  public void asyncLambdaPreservesApplicationContext() {
+    testWorkflowRule.newWorkflowStub(AsyncLambdaWorkflow.class).run();
+
+    assertSpanTree(
+        Arrays.asList(
+            "StartWorkflow:AsyncLambdaWorkflow",
+            "  RunWorkflow:AsyncLambdaWorkflow",
+            "    parent",
+            "      child",
+            "        StartActivity:NopActivity",
+            "          RunActivity:NopActivity"),
+        endedSpans());
   }
 
   @Test

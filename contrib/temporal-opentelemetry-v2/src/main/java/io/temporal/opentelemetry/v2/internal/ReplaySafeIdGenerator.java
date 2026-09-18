@@ -16,6 +16,11 @@ import javax.annotation.Nullable;
  * <p>Mirrors OpenTelemetry's <a href=
  * "https://github.com/open-telemetry/opentelemetry-java/blob/v1.25.0/sdk/trace/src/main/java/io/opentelemetry/sdk/trace/RandomIdGenerator.java">RandomIdGenerator</a>,
  * replacing its platform random source with a workflow random stream.
+ *
+ * <p>Note: {@link Random} has 48 bits of state, so IDs can collide across workflows once an
+ * installation has generated on the order of 2^24 trace IDs. The JDK has no deterministic random
+ * source with a wider seed that can also be reseeded. A random source with more state may be
+ * considered in the future.
  */
 public final class ReplaySafeIdGenerator implements IdGenerator {
   static final ContextKey<Boolean> INTERCEPTOR_SPAN = ContextKey.named("temporal-interceptor-span");

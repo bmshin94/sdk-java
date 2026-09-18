@@ -123,6 +123,34 @@ public final class TestWorkflows {
   }
 
   @WorkflowInterface
+  public interface AsyncLambdaWorkflow {
+    @WorkflowMethod
+    void run();
+  }
+
+  public static class AsyncLambdaWorkflowImpl implements AsyncLambdaWorkflow {
+    @Override
+    public void run() {
+      Span parent = startSpan("asyncLambda", "parent");
+      try (Scope ignored = parent.makeCurrent()) {
+        Async.function(
+                () -> {
+                  Span child = startSpan("asyncLambda", "child");
+                  try (Scope ignoredChild = child.makeCurrent()) {
+                    activities().nopActivity();
+                  } finally {
+                    child.end();
+                  }
+                  return null;
+                })
+            .get();
+      } finally {
+        parent.end();
+      }
+    }
+  }
+
+  @WorkflowInterface
   public interface BenignErrorWorkflow {
     @WorkflowMethod
     void run();
@@ -328,26 +356,36 @@ public final class TestWorkflows {
   @WorkflowInterface
   public interface ExternalWorkflowWithSignal {
     @WorkflowMethod
-    void run();
+    String run();
 
     @SignalMethod
     void externalSignal();
+
+    @SignalMethod
+    void scheduleStarted(String workflowId);
   }
 
   public static class ExternalWorkflowWithSignalImpl implements ExternalWorkflowWithSignal {
-    private boolean signaled;
+    private boolean externalSignaled;
+    private String scheduledWorkflowId;
 
     @Override
-    public void run() {
+    public String run() {
       spanAround(
           "externalWorkflowWithSignal",
           "external-workflow-with-signal-span",
-          () -> Workflow.await(() -> signaled));
+          () -> Workflow.await(() -> externalSignaled && scheduledWorkflowId != null));
+      return scheduledWorkflowId;
     }
 
     @Override
     public void externalSignal() {
-      signaled = true;
+      externalSignaled = true;
+    }
+
+    @Override
+    public void scheduleStarted(String workflowId) {
+      scheduledWorkflowId = workflowId;
     }
   }
 
@@ -569,12 +607,17 @@ public final class TestWorkflows {
   @WorkflowInterface
   public interface StandaloneWorkflow {
     @WorkflowMethod
-    void run();
+    void run(String signalReceiverWorkflowId);
   }
 
   public static class StandaloneWorkflowImpl implements StandaloneWorkflow {
     @Override
-    public void run() {}
+    public void run(String signalReceiverWorkflowId) {
+      if (signalReceiverWorkflowId != null) {
+        Workflow.newExternalWorkflowStub(ExternalWorkflowWithSignal.class, signalReceiverWorkflowId)
+            .scheduleStarted(Workflow.getInfo().getWorkflowId());
+      }
+    }
   }
 
   @WorkflowInterface

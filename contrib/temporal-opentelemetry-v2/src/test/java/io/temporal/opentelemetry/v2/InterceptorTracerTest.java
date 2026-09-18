@@ -30,6 +30,7 @@ import io.temporal.client.schedules.ScheduleClientOptions;
 import io.temporal.client.schedules.ScheduleHandle;
 import io.temporal.client.schedules.ScheduleOptions;
 import io.temporal.client.schedules.ScheduleSpec;
+import io.temporal.client.schedules.ScheduleUpdate;
 import io.temporal.opentelemetry.v2.TestWorkflows.AsyncCompletionWorkflow;
 import io.temporal.opentelemetry.v2.TestWorkflows.AsyncCompletionWorkflowImpl;
 import io.temporal.opentelemetry.v2.TestWorkflows.ChildWorkflowWithSignalImpl;
@@ -168,7 +169,6 @@ public class InterceptorTracerTest extends OtelTestBase {
       assertEquals("ok", comprehensive.getStatus());
       comprehensive.proceed();
       comprehensiveStub.getResult(Void.class);
-      WorkflowStub.fromTyped(external).getResult(Void.class);
 
       testWorkflowRule
           .getActivityClient()
@@ -185,7 +185,7 @@ public class InterceptorTracerTest extends OtelTestBase {
           .newWorkflowStub(
               StandaloneWorkflow.class,
               options(taskQueue, "otel-standalone-workflow-" + UUID.randomUUID()))
-          .run();
+          .run(null);
 
       AsyncCompletionWorkflow asyncCompletion =
           client.newWorkflowStub(
@@ -231,6 +231,22 @@ public class InterceptorTracerTest extends OtelTestBase {
                       .build(),
                   ScheduleOptions.newBuilder().build());
       try {
+        String updatedScheduleWorkflowId = "otel-schedule-updated-workflow-" + UUID.randomUUID();
+        schedule.update(
+            input ->
+                new ScheduleUpdate(
+                    Schedule.newBuilder(input.getDescription().getSchedule())
+                        .setAction(
+                            ScheduleActionStartWorkflow.newBuilder()
+                                .setWorkflowType(StandaloneWorkflow.class)
+                                .setOptions(options(taskQueue, updatedScheduleWorkflowId))
+                                .setArguments(externalWorkflowId)
+                                .build())
+                        .build()));
+        schedule.trigger();
+        String scheduledWorkflowId = WorkflowStub.fromTyped(external).getResult(String.class);
+        client.newUntypedWorkflowStub(scheduledWorkflowId).getResult(Void.class);
+
         WorkflowStub signalWithStart =
             client.newUntypedWorkflowStub(
                 "SignalWithStartTarget",
@@ -391,6 +407,10 @@ public class InterceptorTracerTest extends OtelTestBase {
         "  TerminateWorkflow",
         "  DescribeWorkflow",
         "  CreateSchedule:" + scheduleId,
+        "  UpdateSchedule:" + scheduleId,
+        "    RunWorkflow:StandaloneWorkflow",
+        "      SignalExternalWorkflow:scheduleStarted",
+        "        HandleSignal:scheduleStarted",
         // Signal-with-start links client, worker, signal, and user spans.
         "  SignalWithStartWorkflow:SignalWithStartTarget",
         "    HandleSignal:startSignal",
@@ -428,12 +448,12 @@ public class InterceptorTracerTest extends OtelTestBase {
         "  activity-span",
         "  local-activity-span",
         "  child-workflow-with-signal-span",
-        "  external-workflow-with-signal-span",
         "  workflow-with-nexus-handler-span",
         "  nexus-cancel-handler-span",
         // Continue-as-new emits the user span once per run.
         "  comprehensive-outbound-workflow-span",
         "  comprehensive-outbound-workflow-span",
+        "  external-workflow-with-signal-span",
         "  signal-with-start-target-span",
         "  update start",
         "  update-target-workflow-span",

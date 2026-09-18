@@ -20,6 +20,7 @@ import io.opentelemetry.sdk.trace.SdkTracerProviderBuilder;
 import io.temporal.common.Experimental;
 import io.temporal.opentelemetry.v2.internal.ReplaySafeIdGenerator;
 import io.temporal.opentelemetry.v2.internal.ReplaySafeTracer;
+import io.temporal.opentelemetry.v2.internal.TemporalContextStorage;
 import java.io.Closeable;
 import javax.annotation.Nonnull;
 
@@ -37,6 +38,7 @@ public final class ReplaySafeOpenTelemetry implements OpenTelemetry, Closeable {
   private final ContextPropagators propagators;
 
   private ReplaySafeOpenTelemetry(Builder builder) {
+    TemporalContextStorage.install();
     this.tracerProvider =
         new ReplaySafeTracerProvider(
             builder.tracerProviderBuilder.setIdGenerator(new ReplaySafeIdGenerator()).build());
